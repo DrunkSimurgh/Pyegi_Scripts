@@ -5,7 +5,7 @@ authors = [
 ]
 description = "Converts line to pixels and moves the pixels."
 name = "Disintegration"
-version = "0.0.1b"
+version = "0.0.1"
 
 [tool.poetry.dependencies]
 pyonfx = "^0.9.13"
