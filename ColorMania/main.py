@@ -9,11 +9,7 @@ from pyonfx import *
 import numpy as np
 import sys
 
-from pathlib import Path
-file = Path(__file__).resolve()
-sys.path.append(str(file.parents[2]) + "/Pyegi")
-import Pyegi  # TODO: I don't know shit about python packages; but this library should convert to an installable one. These path-play must not exist
-# from .. .. Pyegi import Pyegi # this is for having intellisense in development
+import Pyegi
 
 
 parameters_table = Pyegi.get_parameters()
