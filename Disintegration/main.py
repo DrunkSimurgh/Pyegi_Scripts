@@ -7,12 +7,9 @@ import math
 import random
 import sys
 
-from pathlib import Path
-file = Path(__file__).resolve()
-sys.path.append(str(file.parents[2]) + "/Pyegi")
-import Pyegi  # TODO: I don't know shit about python packages; but this library should convert to an installable one. These path-play must not exist
+import Pyegi
 
-io = Ass(Pyegi.GetInputFilePath(), extended=True)
+io = Ass(Pyegi.get_input_file_path(), extended=True)
 meta, styles, lines = io.get_data()
 
 
@@ -39,7 +36,7 @@ def sub(line, l):
         )
     )
 
-    Pyegi.SendLine(l)
+    Pyegi.send_line(l)
 
     # Main Effect
     l.layer = 1
@@ -66,7 +63,7 @@ def sub(line, l):
             l.dur / 4,
             p_sh,
         )
-        Pyegi.SendLine(l)
+        Pyegi.send_line(l)
 
 
 for line in lines:
@@ -74,4 +71,4 @@ for line in lines:
     sub(line, line.copy())
 
 
-Pyegi.CreateOutputFile()
+Pyegi.create_output_file()

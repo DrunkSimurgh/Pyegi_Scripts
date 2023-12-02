@@ -9,10 +9,14 @@ from pyonfx import *
 import numpy as np
 import sys
 
-import Pyegi
+from pathlib import Path
+file = Path(__file__).resolve()
+sys.path.append(str(file.parents[2]) + "/Pyegi")
+import Pyegi  # TODO: I don't know shit about python packages; but this library should convert to an installable one. These path-play must not exist
+# from .. .. Pyegi import Pyegi # this is for having intellisense in development
 
 
-parameters_table = Pyegi.GetParameters()
+parameters_table = Pyegi.get_parameters()
 for items in parameters_table["Windows"][0]["Controls"]:
     if items["name"] == "dropdown1":
         direction1 = items["value"]
@@ -28,7 +32,7 @@ if direction1 == "Slant":
     if angle1 == 90:
         direction1 = "Horizontal"
 
-io = Ass(Pyegi.GetInputFilePath(), extended=True)
+io = Ass(Pyegi.get_input_file_path(), extended=True)
 meta, styles, lines = io.get_data()
 
 # oval specs
@@ -82,7 +86,7 @@ def sub(line, l):
                 line.raw_text,
             )
 
-            Pyegi.SendLine(l)
+            Pyegi.send_line(l)
 
     if direction1 == "Vertical":
         for i in range(n):
@@ -103,7 +107,7 @@ def sub(line, l):
                 line.raw_text,
             )
 
-            Pyegi.SendLine(l)
+            Pyegi.send_line(l)
 
     if direction1 == "Slant":
         eps1 = 1.0
@@ -130,7 +134,7 @@ def sub(line, l):
                     line.raw_text,
                 )
 
-                Pyegi.SendLine(l)
+                Pyegi.send_line(l)
 
         else:
             for i in range(n):
@@ -155,7 +159,7 @@ def sub(line, l):
                     line.raw_text,
                 )
 
-                Pyegi.SendLine(l)
+                Pyegi.send_line(l)
 
     if direction1 == "Oval":
         for i in range(n):
@@ -187,7 +191,7 @@ def sub(line, l):
                 line.raw_text,
             )
 
-            Pyegi.SendLine(l)
+            Pyegi.send_line(l)
 
 
 for line in lines:
@@ -195,4 +199,4 @@ for line in lines:
     sub(line, line.copy())
 
 
-Pyegi.CreateOutputFile()
+Pyegi.create_output_file()

@@ -5,7 +5,7 @@ authors = [
 ]
 description = "Does some types of color gradients on the lines."
 name = "ColorMania"
-version = "0.0.1"
+version = "0.0.2"
 
 [tool.poetry.dependencies]
 pyonfx = "^0.9.13"
@@ -16,7 +16,6 @@ python = ">=3.9,<3.10"
 [tool.pyegi]
 describer-version = "0.1.0"
 name = "[sample] ColorMania"
-known-feeds = []
 
 [build-system]
 build-backend = "poetry.core.masonry.api"
