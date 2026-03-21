@@ -1,0 +1,121 @@
+{
+	"describer-version": "0.1.0",
+	"Format": "lua",
+	"Windows": [
+		{
+			"name": "main_window",
+			"Controls": [
+				{
+					"name": "label1",
+					"x": 0,
+					"label": "Starting frx (x: line's direction):",
+					"y": 0,
+					"class": "label",
+					"height": 1,
+					"width": 1
+				},
+				{
+					"max": 1000000,
+					"x": 1,
+					"y": 0,
+					"class": "floatedit",
+					"min": -1000000,
+					"value": 0,
+					"step": 0.01,
+					"width": 1,
+					"name": "floatedit1",
+					"height": 1
+				},
+				{
+					"name": "label2",
+					"x": 0,
+					"label": "Ending frx:",
+					"y": 1,
+					"class": "label",
+					"height": 1,
+					"width": 1
+				},
+				{
+					"max": 1000000,
+					"x": 1,
+					"y": 1,
+					"class": "floatedit",
+					"min": -1000000,
+					"value": 360,
+					"step": 0.01,
+					"width": 1,
+					"name": "floatedit2",
+					"height": 1
+				},
+				{
+					"name": "label3",
+					"x": 0,
+					"label": "Acceleration:",
+					"y": 2,
+					"class": "label",
+					"height": 1,
+					"width": 1
+				},
+				{
+					"max": 1000000,
+					"x": 1,
+					"y": 2,
+					"class": "floatedit",
+					"min": -1000000,
+					"value": 1,
+					"step": 0.01,
+					"width": 1,
+					"name": "floatedit3",
+					"height": 1
+				},
+				{
+					"name": "label5",
+					"x": 0,
+					"label": "Calculation type:",
+					"y": 4,
+					"class": "label",
+					"height": 1,
+					"width": 1
+				},
+				{
+					"x": 1,
+					"y": 4,
+					"class": "dropdown",
+					"items": [
+						"original",
+						"shape"
+					],
+					"hint": "",
+					"value": "original",
+					"width": 1,
+					"name": "dropdown1",
+					"height": 1
+				},
+				{
+					"class": "Pyegi_button",
+					"name": "cancel_button",
+					"text": "Cancel",
+					"action": "Cancel",
+					"transition to": "",
+					"hint": "",
+					"x": 0,
+					"y": 5,
+					"width": 1,
+					"height": 1
+				},
+				{
+					"class": "Pyegi_button",
+					"name": "apply_button",
+					"text": "Apply",
+					"action": "Apply",
+					"transition to": "",
+					"hint": "",
+					"x": 1,
+					"y": 5,
+					"width": 1,
+					"height": 1
+				}
+			]
+		}
+	]
+}

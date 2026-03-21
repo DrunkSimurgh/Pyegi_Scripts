@@ -1,0 +1,25 @@
+[tool.poetry]
+name = "Rotation"
+version = "0.1.0"
+description = "Rotates a line on its frz axis with given acceleration."
+authors = [
+    "DrunkSimurgh <saman.9267@gmail.com>"
+]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+pyonfx = "^0.11.0"
+toml = "^0.10.2"
+appdirs = "^1.4.4"
+videotimestamps = "^1.1.0"
+
+[tool.poetry.dev-dependencies]
+
+[tool.pyegi]
+describer-version = "0.1.0"
+name = "[fx] Rotation"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
