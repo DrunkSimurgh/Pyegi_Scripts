@@ -18,6 +18,7 @@ describer-version = "0.1.0"
 name = "[sample] ColorMania"
 known-feeds = [
   "https://github.com/DrunkSimurgh/Pyegi_Scripts/tree/main/Rotation",
+  "https://github.com/DrunkSimurgh/Pyegi_Scripts/tree/main/Trace",
 ]
 
 [build-system]
