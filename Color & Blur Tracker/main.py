@@ -1,5 +1,3 @@
-from __future__ import annotations
-from PyegiInitializer import *
 # -*- coding: utf-8 -*-
 
 """
@@ -177,6 +175,28 @@ class AlphaReference:
     fg_bgr: np.ndarray
     ref_inner_mask_full: np.ndarray
 
+class VideoSource:
+    def __init__(self, path: str):
+        self.path = path
+        self.cap = cv2.VideoCapture(path)
+        if not self.cap.isOpened():
+            raise RuntimeError(f"Could not open video: {path}")
+        self.frame_count = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        self.fps = float(self.cap.get(cv2.CAP_PROP_FPS) or 0.0) or 23.976
+        self.width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        self.height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+    def read_frame_at_index(self, frame_index: int) -> np.ndarray:
+        frame_index = max(0, min(frame_index, max(0, self.frame_count - 1)))
+        self.cap.set(cv2.CAP_PROP_POS_FRAMES, frame_index)
+        ok, frame = self.cap.read()
+        if not ok or frame is None:
+            raise RuntimeError(f"Could not read frame {frame_index} from {self.path}")
+        return frame
+
+    def release(self):
+        self.cap.release()
+
 # -----------------------------------------------------------------------------
 # Qt UI
 # -----------------------------------------------------------------------------
@@ -253,15 +273,46 @@ class SegmentSelectionDialog(QtWidgets.QDialog):
     def _apply_theme(self):
         self.setStyleSheet(
             """
-            QDialog { background: #0f1117; color: #eef3ff; }
-            QLabel { color: #eef3ff; font-size: 13px; }
+            QDialog {
+                background: #0f1117;
+                color: #eef3ff;
+            }
+
+            QLabel {
+                color: #eef3ff;
+                font-size: 13px;
+            }
+
             QComboBox {
                 background: #0c0f15;
                 color: #f5f8ff;
                 border: 1px solid #343b4f;
                 border-radius: 10px;
                 padding: 8px;
+                min-height: 20px;
             }
+
+            QComboBox QAbstractItemView {
+                background: #0c0f15;
+                color: #f5f8ff;
+                border: 1px solid #343b4f;
+                selection-background-color: #2f6fed;
+                selection-color: #ffffff;
+                outline: 0;
+            }
+
+            QComboBox QAbstractItemView::item {
+                background: #0c0f15;
+                color: #f5f8ff;
+                min-height: 24px;
+                padding: 6px 8px;
+            }
+
+            QComboBox QAbstractItemView::item:selected {
+                background: #2f6fed;
+                color: #ffffff;
+            }
+
             QPushButton {
                 background: #2f6fed;
                 color: white;
@@ -1929,29 +1980,6 @@ def parse_ae_keyframe_data(text: str) -> TrackingData:
 # -----------------------------------------------------------------------------
 # Video helpers
 # -----------------------------------------------------------------------------
-class VideoSource:
-    def __init__(self, path: str):
-        self.path = path
-        self.cap = cv2.VideoCapture(path)
-        if not self.cap.isOpened():
-            raise RuntimeError(f"Could not open video: {path}")
-        self.frame_count = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        self.fps = float(self.cap.get(cv2.CAP_PROP_FPS) or 0.0) or 23.976
-        self.width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        self.height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-
-    def read_frame_at_index(self, frame_index: int) -> np.ndarray:
-        frame_index = max(0, min(frame_index, max(0, self.frame_count - 1)))
-        self.cap.set(cv2.CAP_PROP_POS_FRAMES, frame_index)
-        ok, frame = self.cap.read()
-        if not ok or frame is None:
-            raise RuntimeError(f"Could not read frame {frame_index} from {self.path}")
-        return frame
-
-    def release(self):
-        self.cap.release()
-
-
 def map_external_trimmed_frame(local_index: int, total_local: int, source: VideoSource) -> int:
     if total_local <= 1:
         return 0
