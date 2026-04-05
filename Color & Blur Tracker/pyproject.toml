@@ -2,8 +2,8 @@
 authors = [
   "DrunkSimurgh <saman.9267@gmail.com>",
 ]
-description = "Trace the drawn line either with strokes or the text."
-name = "Trace"
+description = "Track color and blur (and alpha (experimental))."
+name = "Color & Blur Tracker"
 version = "0.0.1"
 
 [tool.poetry.dependencies]
