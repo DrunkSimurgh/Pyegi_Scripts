@@ -2,9 +2,9 @@
 authors = [
   "DrunkSimurgh <saman.9267@gmail.com>",
 ]
-description = "Trace the drawn line either with strokes or the text."
+description = "Trace the drawn line either with strokes or the text. Trace text mode works in the boundaries of the text."
 name = "Trace"
-version = "0.0.1"
+version = "0.0.2"
 
 [tool.poetry.dependencies]
 python = "^3.10"
@@ -13,12 +13,13 @@ toml = "^0.10.2"
 appdirs = "^1.4.4"
 videotimestamps = "^1.1.0"
 pyqt6 = "^6.10.2"
+opencv-python = "^4.13.0.92"
 
 [tool.poetry.dev-dependencies]
 
 [tool.pyegi]
 describer-version = "0.1.0"
-name = "[fx] Trace"
+name = "[ts] Trace"
 
 [build-system]
 build-backend = "poetry.core.masonry.api"
