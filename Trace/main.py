@@ -1534,8 +1534,8 @@ if __name__ == "__main__":
         raise RuntimeError("No subtitle lines found.")
 
     # Best-effort script resolution lookup
-    playresx = int(getattr(meta, "playres_x", getattr(meta, "playresx", 1280)))
-    playresy = int(getattr(meta, "playres_y", getattr(meta, "playresy", 720)))
+    playresx = int(getattr(meta, "play_res_x", 1280))
+    playresy = int(getattr(meta, "play_res_y", 720))
 
     background_pixmap = prepare_preview_background(playresx, playresy)
 
