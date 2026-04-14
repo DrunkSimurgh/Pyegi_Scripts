@@ -4,7 +4,7 @@ authors = [
 ]
 description = "Selection tool"
 name = "SelectFX"
-version = "0.0.2b"
+version = "0.0.2c"
 
 [tool.poetry.dependencies]
 python = "^3.10"

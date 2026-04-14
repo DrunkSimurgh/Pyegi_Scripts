@@ -108,6 +108,8 @@ from PyQt6.QtWidgets import (
     QFormLayout,
     QGroupBox,
     QSplitter,
+    QScrollArea,
+    QSizePolicy,
 )
 from PyQt6.QtGui import (
     QPixmap,
@@ -1455,8 +1457,8 @@ class SelectionWindow(QMainWindow):
         if screen is not None:
             geo = screen.availableGeometry()
             self.resize(
-                max(900, int(geo.width() * 0.9)),
-                max(650, int(geo.height() * 0.9)),
+                max(880, int(geo.width() * 0.82)),
+                max(620, int(geo.height() * 0.82)),
             )
         else:
             self.resize(1200, 800)
@@ -1487,9 +1489,21 @@ class SelectionWindow(QMainWindow):
         splitter.addWidget(self.canvas)
 
         sidebar = QWidget()
+        sidebar.setMinimumWidth(260)
+        sidebar.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
         side = QVBoxLayout(sidebar)
-        splitter.addWidget(sidebar)
-        splitter.setSizes([1200, 220])
+        side.setContentsMargins(8, 8, 8, 8)
+        side.setSpacing(8)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setWidget(sidebar)
+        scroll.setMinimumWidth(280)
+        scroll.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
+
+        splitter.addWidget(scroll)
+        splitter.setSizes([1000, 220])
 
         info_box = QGroupBox("Info")
         info_form = QFormLayout(info_box)
@@ -1576,8 +1590,14 @@ class SelectionWindow(QMainWindow):
         self.btn_fill.clicked.connect(self.canvas.fill_islands)
 
         morph_form.addRow("Radius", self.morph_radius)
-        morph_form.addRow(self.btn_expand, self.btn_contract)
-        morph_form.addRow(self.btn_fill)
+        morph_buttons = QVBoxLayout()
+        morph_buttons.setSpacing(6)
+        morph_buttons.addWidget(self.btn_expand)
+        morph_buttons.addWidget(self.btn_contract)
+        morph_buttons.addWidget(self.btn_fill)
+
+        morph_form.addRow("Radius", self.morph_radius)
+        morph_form.addRow(morph_buttons)
 
         side.addWidget(morph_box)
 
@@ -1601,7 +1621,8 @@ class SelectionWindow(QMainWindow):
 
         shortcuts_box = QGroupBox("Shortcuts")
         shortcuts_layout = QVBoxLayout(shortcuts_box)
-        shortcuts_layout.addWidget(QLabel(
+
+        self.shortcuts_label = QLabel(
             "W: wand\n"
             "M: rectangular marquee\n"
             "U: elliptical marquee\n"
@@ -1609,25 +1630,32 @@ class SelectionWindow(QMainWindow):
             "F: freehand lasso\n"
             "B: brush add\n"
             "E: brush subtract\n"
-            "0: reset the view to fit\n"
             "Shift: add\n"
             "Alt: subtract\n"
-            "Alt+]: expand selection\n"
-            "Alt+[: contract selection\n"
-            "Ctrl+Shift+F: fill islands\n"
             "Ctrl+D: clear selection\n"
-            "Ctrl+Z: undo selection\n"
-            "Ctrl+Y/Ctrl+Shift+Z: redo selection\n"
+            "Ctrl+Z: undo\n"
+            "Ctrl+Y / Ctrl+Shift+Z: redo\n"
             "Enter: accept\n"
             "Right-click polygon lasso: finish polygon\n"
             "Ctrl+wheel: zoom\n"
             "Space+drag or middle-drag: pan\n"
             "[ / ]: brush size\n"
-            "- / =: wand tolerance"
-        ))
+            "- / =: wand tolerance\n"
+            "Alt+]: expand selection\n"
+            "Alt+[: contract selection\n"
+            "Ctrl+Shift+F: fill islands\n"
+            "0: fit view"
+        )
+        self.shortcuts_label.setWordWrap(True)
+        self.shortcuts_label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        self.shortcuts_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.MinimumExpanding)
+
+        shortcuts_layout.addWidget(self.shortcuts_label)
         side.addWidget(shortcuts_box)
 
-        buttons = QHBoxLayout()
+        button_panel = QVBoxLayout()
+        button_panel.setSpacing(6)
+
         self.btn_undo = QPushButton("Undo")
         self.btn_redo = QPushButton("Redo")
         self.btn_undo.clicked.connect(self.canvas.undo)
@@ -1642,14 +1670,59 @@ class SelectionWindow(QMainWindow):
         self.btn_cancel.clicked.connect(self.close)
         self.btn_fit = QPushButton("Fit")
         self.btn_fit.clicked.connect(self.canvas.fit_image_to_widget)
-        buttons.addWidget(self.btn_undo)
-        buttons.addWidget(self.btn_redo)
-        buttons.addWidget(self.btn_fit)
-        buttons.addWidget(self.btn_clear)
-        buttons.addWidget(self.btn_finish_poly)
-        buttons.addWidget(self.btn_accept)
-        buttons.addWidget(self.btn_cancel)
-        side.addLayout(buttons)
+        buttons_row1 = QHBoxLayout()
+        buttons_row1.setSpacing(6)
+        buttons_row1.addWidget(self.btn_undo)
+        buttons_row1.addWidget(self.btn_redo)
+        buttons_row1.addWidget(self.btn_fit)
+        buttons_row1.addWidget(self.btn_clear)
+
+        buttons_row2 = QHBoxLayout()
+        buttons_row2.setSpacing(6)
+        buttons_row2.addWidget(self.btn_finish_poly)
+        buttons_row2.addWidget(self.btn_accept)
+        buttons_row2.addWidget(self.btn_cancel)
+
+        button_panel.addLayout(buttons_row1)
+        button_panel.addLayout(buttons_row2)
+
+        side.addLayout(button_panel)
+
+        for btn in [
+            self.btn_expand,
+            self.btn_contract,
+            self.btn_fill,
+            self.btn_undo,
+            self.btn_redo,
+            self.btn_fit,
+            self.btn_clear,
+            self.btn_finish_poly,
+            self.btn_accept,
+            self.btn_cancel,
+        ]:
+            btn.setMinimumHeight(32)
+            btn.setMinimumWidth(90)
+        
+        for w in [
+            self.tool_combo,
+            self.wand_tol,
+            self.wand_island,
+            self.wand_feather,
+            self.brush_radius,
+            self.morph_radius,
+        ]:
+            w.setMinimumHeight(28)
+        
+        for box in [
+            info_box,
+            tool_box,
+            wand_box,
+            brush_box,
+            morph_box,
+        ]:
+            box.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
+        shortcuts_box.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
+
         side.addStretch(1)
 
         self.status_label = QLabel("Ready")
