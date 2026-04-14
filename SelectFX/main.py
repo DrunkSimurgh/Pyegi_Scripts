@@ -643,6 +643,84 @@ def build_initial_mask_for_line(line, output_mode, clip_mode, width, height):
 
     return None
 
+def replace_matching_vector_clip(text, clip_mode, new_path):
+    """
+    Replace the last matching vector \\clip(...) or \\iclip(...) in the line.
+    Only replaces vector clips, not rectangular clips.
+    Returns None if no matching replaceable tag is found.
+    """
+    if not text or not new_path:
+        return None
+
+    tag_name = "iclip" if clip_mode == "iclip" else "clip"
+    pattern = r"(\\%s\((.*?)\))" % tag_name
+
+    matches = list(re.finditer(pattern, text, flags=re.IGNORECASE | re.DOTALL))
+    if not matches:
+        return None
+
+    # Walk from the end so we replace the last matching usable one.
+    for m in reversed(matches):
+        full_tag = m.group(1)
+        inner = m.group(2).strip()
+
+        # Skip rectangular clips.
+        if re.fullmatch(r"\s*[-\d.]+\s*,\s*[-\d.]+\s*,\s*[-\d.]+\s*,\s*[-\d.]+\s*", inner):
+            continue
+
+        # Only replace clips we can parse / that our code can produce.
+        if not parse_ass_draw_path_simple(inner):
+            continue
+
+        replacement = "\\%s(%s)" % (tag_name, new_path)
+        return text[:m.start()] + replacement + text[m.end():]
+
+    return None
+
+def replace_generated_shape_line(text, new_path, avg_bgr):
+    """
+    Replace an existing generated-shape style line:
+    { ... \\p1 ... }<simple m/l/c path>
+    Returns None if the line is not a replaceable generated shape.
+    """
+    if not text or not new_path:
+        return None
+
+    m = re.match(r"^\{([^}]*)\}(.*)$", text, flags=re.DOTALL)
+    if not m:
+        return None
+
+    tags = m.group(1)
+    body = m.group(2).strip()
+
+    if re.search(r"\\p1\b", tags) is None:
+        return None
+
+    if not parse_ass_draw_path_simple(body):
+        return None
+
+    color_tag = bgr_to_ass_bgr_tag(avg_bgr)
+
+    new_tags = tags
+
+    if re.search(r"\\1c&H[0-9A-Fa-f]+&", new_tags):
+        new_tags = re.sub(r"\\1c&H[0-9A-Fa-f]+&", r"\\1c%s" % color_tag, new_tags, count=1)
+    else:
+        new_tags += r"\1c%s" % color_tag
+
+    return "{%s}%s" % (new_tags, new_path)
+
+def insert_tag_into_first_override_block(text, tag):
+    if not tag:
+        return text
+
+    if text.startswith("{"):
+        close = text.find("}")
+        if close != -1:
+            return text[:close] + tag + text[close:]
+
+    return "{%s}%s" % (tag, text)
+
 def make_vector_clip_tag(path: str, inverse: bool = False) -> str:
     if not path:
         return ""
@@ -1740,24 +1818,36 @@ if __name__ == "__main__":
         l = line.copy()
 
         if settings.output_mode == "clip":
-            clip_tag = make_vector_clip_tag(
+            replaced = replace_matching_vector_clip(
+                line.raw_text,
+                settings.clip_mode,
                 result.ass_path,
-                inverse=(settings.clip_mode == "iclip"),
             )
-            if line.raw_text.startswith("{"):
-                close = line.raw_text.find("}")
-                if close != -1:
-                    l.text = line.raw_text[:close] + clip_tag + line.raw_text[close:]
-                else:
-                    l.text = "{" + clip_tag + "}" + line.raw_text
+
+            if replaced is not None:
+                l.text = replaced
             else:
-                l.text = "{" + clip_tag + "}" + line.raw_text
+                clip_tag = make_vector_clip_tag(
+                    result.ass_path,
+                    inverse=(settings.clip_mode == "iclip"),
+                )
+                l.text = insert_tag_into_first_override_block(line.raw_text, clip_tag)
+
         else:
-            color_tag = bgr_to_ass_bgr_tag(result.average_bgr)
-            l.text = "{\\an7\\pos(0,0)\\bord0\\shad0\\1c%s\\p1}%s" % (
-                color_tag,
+            replaced = replace_generated_shape_line(
+                line.raw_text,
                 result.ass_path,
+                result.average_bgr,
             )
+
+            if replaced is not None:
+                l.text = replaced
+            else:
+                color_tag = bgr_to_ass_bgr_tag(result.average_bgr)
+                l.text = "{\\an7\\pos(0,0)\\bord0\\shad0\\1c%s\\p1}%s" % (
+                    color_tag,
+                    result.ass_path,
+                )
 
         Pyegi.send_line(l)
 
