@@ -37,6 +37,9 @@ Selection tools included
 - Magic wand                       [W]
 - Brush add                        [B]
 - Brush subtract                   [E]
+- Expand selection                 [Alt+]]
+- Contract selection               [Alt+[]
+- Fill islands                     [Ctrl+Shift+F]
 - Pan                              [Space drag or Middle drag]
 - Zoom                             [Ctrl+Wheel]
 - Reset the view to fit            [0]
@@ -493,6 +496,152 @@ def ass_path_from_mask(mask: np.ndarray, simplify_epsilon: float = 1.5) -> str:
         parts.append(" ".join(cmd))
     return " ".join(parts)
 
+def parse_ass_draw_path_simple(path_text):
+    """
+    Parse only the simple ASS vector syntax this script produces:
+    m x y l x y ... c
+    Multiple subpaths are allowed.
+    Returns a list of polygons, each polygon is a list of (x, y).
+    """
+    if not path_text:
+        return []
+
+    tokens = path_text.strip().split()
+    polygons = []
+    current = []
+    cmd = None
+    i = 0
+
+    while i < len(tokens):
+        tok = tokens[i].lower()
+
+        if tok in ("m", "n", "l", "c"):
+            cmd = tok
+            i += 1
+
+            if cmd == "c":
+                if len(current) >= 3:
+                    polygons.append(current)
+                current = []
+            continue
+
+        if cmd in ("m", "n", "l"):
+            if i + 1 >= len(tokens):
+                break
+            try:
+                x = int(round(float(tokens[i])))
+                y = int(round(float(tokens[i + 1])))
+            except Exception:
+                break
+
+            if cmd in ("m", "n"):
+                if len(current) >= 3:
+                    polygons.append(current)
+                current = [(x, y)]
+            else:
+                current.append((x, y))
+
+            i += 2
+            continue
+
+        # Unsupported command for this importer.
+        return []
+
+    if len(current) >= 3:
+        polygons.append(current)
+
+    return polygons
+
+
+def mask_from_ass_draw_path(path_text, width, height):
+    polygons = parse_ass_draw_path_simple(path_text)
+    mask = np.zeros((height, width), dtype=np.uint8)
+
+    if not polygons:
+        return mask
+
+    pts_list = []
+    for poly in polygons:
+        pts = np.array(poly, dtype=np.int32)
+        if len(pts) >= 3:
+            pts_list.append(pts)
+
+    if pts_list:
+        cv2.fillPoly(mask, pts_list, 255)
+
+    return mask
+
+def extract_matching_vector_clip_path(text, clip_mode):
+    """
+    Returns the vector path from a matching \\clip(...) or \\iclip(...)
+    only if it looks like the kind of vector clip this script produces.
+    Returns None otherwise.
+    """
+    if not text:
+        return None
+
+    tag_name = "iclip" if clip_mode == "iclip" else "clip"
+    pattern = r"\\%s\((.*?)\)" % tag_name
+    matches = re.findall(pattern, text, flags=re.IGNORECASE)
+    if not matches:
+        return None
+
+    # Use the last matching tag, consistent with typical override behavior.
+    path = matches[-1].strip()
+
+    # Reject rectangular clips like x1,y1,x2,y2.
+    if re.fullmatch(r"\s*[-\d.]+\s*,\s*[-\d.]+\s*,\s*[-\d.]+\s*,\s*[-\d.]+\s*", path):
+        return None
+
+    # Accept only simple paths this script can round-trip.
+    polys = parse_ass_draw_path_simple(path)
+    if not polys:
+        return None
+
+    return path
+
+
+def extract_generated_shape_path(text):
+    """
+    Returns the vector path only if the line looks like a shape line this script
+    itself could have produced: override block contains \\p1, body is an m/l/c path.
+    """
+    if not text:
+        return None
+
+    m = re.match(r"^\{([^}]*)\}(.*)$", text, flags=re.DOTALL)
+    if not m:
+        return None
+
+    tags = m.group(1)
+    body = m.group(2).strip()
+
+    if re.search(r"\\p1\b", tags) is None:
+        return None
+
+    polys = parse_ass_draw_path_simple(body)
+    if not polys:
+        return None
+
+    return body
+
+
+def build_initial_mask_for_line(line, output_mode, clip_mode, width, height):
+    text = getattr(line, "raw_text", "") or ""
+
+    if output_mode == "clip":
+        path = extract_matching_vector_clip_path(text, clip_mode)
+        if path is None:
+            return None
+        return mask_from_ass_draw_path(path, width, height)
+
+    if output_mode == "shape":
+        path = extract_generated_shape_path(text)
+        if path is None:
+            return None
+        return mask_from_ass_draw_path(path, width, height)
+
+    return None
 
 def make_vector_clip_tag(path: str, inverse: bool = False) -> str:
     if not path:
@@ -519,6 +668,31 @@ def combine_masks(base: np.ndarray, incoming: np.ndarray, mode: str) -> np.ndarr
         return out
     return incoming.copy()
 
+def expand_mask(mask: np.ndarray, radius: int) -> np.ndarray:
+    mask = ensure_mask_uint8(mask)
+    if radius <= 0:
+        return mask.copy()
+    k = radius * 2 + 1
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k))
+    return cv2.dilate(mask, kernel, iterations=1)
+
+
+def contract_mask(mask: np.ndarray, radius: int) -> np.ndarray:
+    mask = ensure_mask_uint8(mask)
+    if radius <= 0:
+        return mask.copy()
+    k = radius * 2 + 1
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k))
+    return cv2.erode(mask, kernel, iterations=1)
+
+
+def fill_mask_islands(mask: np.ndarray) -> np.ndarray:
+    mask = ensure_mask_uint8(mask)
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    out = np.zeros_like(mask)
+    if contours:
+        cv2.drawContours(out, contours, -1, 255, thickness=-1)
+    return out
 
 def seed_magic_wand(frame_bgr: np.ndarray, seed_xy: Tuple[int, int], opts: WandOptions) -> np.ndarray:
     h, w = frame_bgr.shape[:2]
@@ -629,7 +803,7 @@ class CanvasWidget(QWidget):
     selectionChanged = pyqtSignal()
     statusChanged = pyqtSignal(str)
 
-    def __init__(self, frame_bgr: np.ndarray, parent=None):
+    def __init__(self, frame_bgr: np.ndarray, initial_mask=None, parent=None):
         super().__init__(parent)
         self.frame_bgr = frame_bgr.copy()
         self.h, self.w = self.frame_bgr.shape[:2]
@@ -643,8 +817,15 @@ class CanvasWidget(QWidget):
 
         self.selection_mask = np.zeros((self.h, self.w), dtype=np.uint8)
         self.preview_mask = np.zeros((self.h, self.w), dtype=np.uint8)
+
+        if initial_mask is not None:
+            if initial_mask.shape[:2] == (self.h, self.w):
+                self.selection_mask = ensure_mask_uint8(initial_mask.copy())
+
         self.undo_stack = []
         self.redo_stack = []
+        self.edit_undo_stack = []
+        self.edit_redo_stack = []
 
         self.tool = "Magic Wand"
         self.wand_options = WandOptions()
@@ -658,6 +839,140 @@ class CanvasWidget(QWidget):
         self.setMouseTracking(True)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.setMinimumSize(320, 180)
+
+    def expand_selection(self, radius: int = 1):
+        if radius <= 0:
+            return
+        self.push_undo_state()
+        self.selection_mask = expand_mask(self.selection_mask, radius)
+        self.clear_active_edit()
+        self.selectionChanged.emit()
+        self.update()
+        self.statusChanged.emit("Expanded selection by %d px" % radius)
+
+
+    def contract_selection(self, radius: int = 1):
+        if radius <= 0:
+            return
+        self.push_undo_state()
+        self.selection_mask = contract_mask(self.selection_mask, radius)
+        self.clear_active_edit()
+        self.selectionChanged.emit()
+        self.update()
+        self.statusChanged.emit("Contracted selection by %d px" % radius)
+
+
+    def fill_islands(self):
+        self.push_undo_state()
+        self.selection_mask = fill_mask_islands(self.selection_mask)
+        self.clear_active_edit()
+        self.selectionChanged.emit()
+        self.update()
+        self.statusChanged.emit("Filled islands")
+
+    def push_undo_state(self):
+        self.undo_stack.append(self.selection_mask.copy())
+        if len(self.undo_stack) > 100:
+            self.undo_stack.pop(0)
+        self.redo_stack = []
+
+
+    def push_edit_state(self):
+        state = {
+            "poly_points": list(self.poly_points),
+            "freehand_points": list(self.freehand_points),
+            "preview_mask": self.preview_mask.copy(),
+            "drag_start_img": self.drag_start_img,
+            "drag_current_img": self.drag_current_img,
+            "tool": self.tool,
+        }
+        self.edit_undo_stack.append(state)
+        if len(self.edit_undo_stack) > 100:
+            self.edit_undo_stack.pop(0)
+        self.edit_redo_stack = []
+
+
+    def has_active_edit(self):
+        return bool(self.poly_points or self.freehand_points or np.any(self.preview_mask))
+
+
+    def clear_active_edit(self):
+        self.preview_mask[:] = 0
+        self.drag_start_img = None
+        self.drag_current_img = None
+        self.poly_points = []
+        self.freehand_points = []
+        self.edit_undo_stack = []
+        self.edit_redo_stack = []
+        self.update()
+
+
+    def undo(self):
+        if self.has_active_edit() and self.edit_undo_stack:
+            current = {
+                "poly_points": list(self.poly_points),
+                "freehand_points": list(self.freehand_points),
+                "preview_mask": self.preview_mask.copy(),
+                "drag_start_img": self.drag_start_img,
+                "drag_current_img": self.drag_current_img,
+                "tool": self.tool,
+            }
+            self.edit_redo_stack.append(current)
+
+            prev = self.edit_undo_stack.pop()
+            self.poly_points = list(prev["poly_points"])
+            self.freehand_points = list(prev["freehand_points"])
+            self.preview_mask = prev["preview_mask"].copy()
+            self.drag_start_img = prev["drag_start_img"]
+            self.drag_current_img = prev["drag_current_img"]
+            self.update()
+            self.statusChanged.emit("Undo edit")
+            return
+
+        if not self.undo_stack:
+            self.statusChanged.emit("Nothing to undo")
+            return
+
+        self.redo_stack.append(self.selection_mask.copy())
+        self.selection_mask = self.undo_stack.pop()
+        self.clear_active_edit()
+        self.selectionChanged.emit()
+        self.update()
+        self.statusChanged.emit("Undo selection")
+
+
+    def redo(self):
+        if self.has_active_edit() and self.edit_redo_stack:
+            current = {
+                "poly_points": list(self.poly_points),
+                "freehand_points": list(self.freehand_points),
+                "preview_mask": self.preview_mask.copy(),
+                "drag_start_img": self.drag_start_img,
+                "drag_current_img": self.drag_current_img,
+                "tool": self.tool,
+            }
+            self.edit_undo_stack.append(current)
+
+            nxt = self.edit_redo_stack.pop()
+            self.poly_points = list(nxt["poly_points"])
+            self.freehand_points = list(nxt["freehand_points"])
+            self.preview_mask = nxt["preview_mask"].copy()
+            self.drag_start_img = nxt["drag_start_img"]
+            self.drag_current_img = nxt["drag_current_img"]
+            self.update()
+            self.statusChanged.emit("Redo edit")
+            return
+
+        if not self.redo_stack:
+            self.statusChanged.emit("Nothing to redo")
+            return
+
+        self.undo_stack.append(self.selection_mask.copy())
+        self.selection_mask = self.redo_stack.pop()
+        self.clear_active_edit()
+        self.selectionChanged.emit()
+        self.update()
+        self.statusChanged.emit("Redo selection")
 
     def push_undo_state(self):
         self.undo_stack.append(self.selection_mask.copy())
@@ -752,11 +1067,9 @@ class CanvasWidget(QWidget):
         if np.any(self.selection_mask):
             self.push_undo_state()
         self.selection_mask[:] = 0
-        self.preview_mask[:] = 0
-        self.poly_points = []
-        self.freehand_points = []
-        self.update()
+        self.clear_active_edit()
         self.selectionChanged.emit()
+        self.update()
         self.statusChanged.emit("Selection cleared")
 
     def finish_polygon(self):
@@ -770,6 +1083,12 @@ class CanvasWidget(QWidget):
         self.push_undo_state()
         self.selection_mask = combine_masks(self.selection_mask, incoming, mode)
         self.preview_mask[:] = 0
+        self.drag_start_img = None
+        self.drag_current_img = None
+        self.poly_points = []
+        self.freehand_points = []
+        self.edit_undo_stack = []
+        self.edit_redo_stack = []
         self.selectionChanged.emit()
         self.update()
 
@@ -872,12 +1191,14 @@ class CanvasWidget(QWidget):
                 return
 
             if self.tool == "Polygon Lasso":
+                self.push_edit_state()
                 self.poly_points.append((ix, iy))
                 self.drag_current_img = (ix, iy)
                 self.update()
                 return
 
             if self.tool in ("Freehand Lasso", "Brush Add", "Brush Subtract"):
+                self.push_edit_state()
                 self.freehand_points = [(ix, iy)]
                 return
 
@@ -911,14 +1232,20 @@ class CanvasWidget(QWidget):
             return
 
         if self.tool == "Freehand Lasso" and self.freehand_points:
+            self.push_edit_state()
             self.freehand_points.append((ix, iy))
             self.preview_mask = rasterize_polygon(self.freehand_points, (self.h, self.w))
             self.update()
             return
 
         if self.tool in ("Brush Add", "Brush Subtract") and self.freehand_points:
+            self.push_edit_state()
             self.freehand_points.append((ix, iy))
-            self.preview_mask = rasterize_brush(self.freehand_points, self.brush_options.radius, (self.h, self.w))
+            self.preview_mask = rasterize_brush(
+                self.freehand_points,
+                self.brush_options.radius,
+                (self.h, self.w),
+            )
             self.update()
             return
 
@@ -1034,6 +1361,7 @@ class SelectionWindow(QMainWindow):
         initial_tool: str,
         contour_simplify: float,
         global_feather: int,
+        initial_mask=None,
         parent_window=None,
     ):
         super().__init__()
@@ -1066,7 +1394,7 @@ class SelectionWindow(QMainWindow):
         self.selection_result = None
 
         frame_bgr = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR)
-        self.canvas = CanvasWidget(frame_bgr)
+        self.canvas = CanvasWidget(frame_bgr, initial_mask=initial_mask)
         self.canvas.set_tool(initial_tool)
         self.canvas.statusChanged.connect(self._set_status)
         self.canvas.selectionChanged.connect(self._sync_stats)
@@ -1154,6 +1482,27 @@ class SelectionWindow(QMainWindow):
         brush_form.addRow("Radius", self.brush_radius)
         side.addWidget(brush_box)
 
+        morph_box = QGroupBox("Selection Ops")
+        morph_form = QFormLayout(morph_box)
+
+        self.morph_radius = QSpinBox()
+        self.morph_radius.setRange(1, 200)
+        self.morph_radius.setValue(2)
+
+        self.btn_expand = QPushButton("Expand")
+        self.btn_contract = QPushButton("Contract")
+        self.btn_fill = QPushButton("Fill Islands")
+
+        self.btn_expand.clicked.connect(lambda: self.canvas.expand_selection(int(self.morph_radius.value())))
+        self.btn_contract.clicked.connect(lambda: self.canvas.contract_selection(int(self.morph_radius.value())))
+        self.btn_fill.clicked.connect(self.canvas.fill_islands)
+
+        morph_form.addRow("Radius", self.morph_radius)
+        morph_form.addRow(self.btn_expand, self.btn_contract)
+        morph_form.addRow(self.btn_fill)
+
+        side.addWidget(morph_box)
+
         export_box = QGroupBox("Export")
         export_form = QFormLayout(export_box)
 
@@ -1185,6 +1534,9 @@ class SelectionWindow(QMainWindow):
             "0: reset the view to fit\n"
             "Shift: add\n"
             "Alt: subtract\n"
+            "Alt+]: expand selection\n"
+            "Alt+[: contract selection\n"
+            "Ctrl+Shift+F: fill islands\n"
             "Ctrl+D: clear selection\n"
             "Ctrl+Z: undo selection\n"
             "Ctrl+Y/Ctrl+Shift+Z: redo selection\n"
@@ -1239,6 +1591,18 @@ class SelectionWindow(QMainWindow):
         QShortcut(QKeySequence("Ctrl+D"), self, activated=self.canvas.clear_selection)
         QShortcut(QKeySequence("Return"), self, activated=self.accept_result)
         QShortcut(QKeySequence("Enter"), self, activated=self.accept_result)
+        QShortcut(
+            QKeySequence("Alt+]"),
+            self,
+            activated=lambda: self.canvas.expand_selection(int(self.morph_radius.value()))
+        )
+        QShortcut(
+            QKeySequence("Alt+["),
+            self,
+            activated=lambda: self.canvas.contract_selection(int(self.morph_radius.value()))
+        )
+
+        QShortcut(QKeySequence("Ctrl+Shift+F"), self, activated=self.canvas.fill_islands)
 
         self._sync_stats()
 
@@ -1265,6 +1629,8 @@ class SelectionWindow(QMainWindow):
         self.wand_tol.blockSignals(False)
 
     def _sync_stats(self):
+        if np.any(self.canvas.selection_mask):
+            self.status_label.setText("Loaded existing selection from line")
         count = int(np.count_nonzero(self.canvas.selection_mask))
         self.selection_info.setText("%d px selected" % count)
 
@@ -1340,6 +1706,14 @@ if __name__ == "__main__":
                 "Could not load the requested preview frame from the project video."
             )
             raise SystemExit
+        
+        initial_mask = build_initial_mask_for_line(
+            line,
+            settings.output_mode,
+            settings.clip_mode,
+            preview_rgb.shape[1],
+            preview_rgb.shape[0],
+        )
 
         editor = SelectionWindow(
             frame_rgb=preview_rgb,
@@ -1349,6 +1723,7 @@ if __name__ == "__main__":
             initial_tool="Magic Wand",
             contour_simplify=settings.contour_simplify,
             global_feather=settings.global_feather,
+            initial_mask=initial_mask,
             parent_window=settings,
         )
         editor.show()
